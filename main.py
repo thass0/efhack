@@ -5,10 +5,10 @@ import renderer
 import sim_point
 from PIL import Image
 
-width, height = 120, 120
+width, height = 150, 150
 
 # Open the image
-image_path = "mars_1k_color.jpg"  # Replace with your image path
+image_path = "neptunemap.jpg"  # Replace with your image path
 image = Image.open(image_path)
 
 # Convert the image to RGB if it's not already
@@ -139,10 +139,10 @@ while running:
                     for i in range(amount_points):
                         heights = np.append(heights, np.linalg.norm((atm_interesctions[0] + i*dir_vec*distance_between_points) - plan_pos))
                     offset = (np.abs(width/2 - x)/width/2)**2  + (np.abs(height/2 - y)/height/2)**2
-                    offset *= 200
-                    # np.array([1.10, img_pixels[x,y,2] - offset, 1.30, img_pixels[x,y,1] - offset, img_pixels[x,y,0] - offset, 1.15, 1, 1, 0.90, 0.85])*1.0e-33
-                    spectrum = sim_point.sim_point(2500.0, 1.0,[(sim_point.Element.HELIUM, 0.2), (sim_point.Element.OXYGEN, 0.0), (sim_point.Element.IRON, 0.8)], wavelength,[1.0e-33 for _ in range(len(wavelength))] , heights, distance_between_points)
-                    spectrum = np.array(spectrum)*5.0e30
+                    offset *= 100
+                    # 
+                    spectrum = sim_point.sim_point(2500.0, 1.0,[(sim_point.Element.HELIUM, 0.2), (sim_point.Element.OXYGEN, 0.0), (sim_point.Element.IRON, 0.8)], wavelength, np.array([1.10, img_pixels[x,y,2] - offset, 1.30, img_pixels[x,y,1] - offset, img_pixels[x,y,0] - offset, 1.15, 1, 1, 0.90, 0.85])*1.0e-36, heights, distance_between_points)
+                    spectrum = np.array(spectrum)*5.0e32
                     #print(spectrum)
                     color = renderer.intensity_to_rgb(spectrum, wavelength)
                     #print(color)
@@ -155,8 +155,8 @@ while running:
                     heights = np.array([])
                     for i in range(amount_points):
                         heights = np.append(heights, np.linalg.norm((atm_interesctions[0] + i*dir_vec*distance_between_points) - plan_pos))
-                    spectrum = sim_point.sim_point(2500.0, 1.0, [(sim_point.Element.HELIUM, 0.1), (sim_point.Element.OXYGEN, 0.1), (sim_point.Element.IRON, 0.8)], wavelength, [1.0e-33 for _ in range(len(wavelength))], heights, distance_between_points)
-                    spectrum = np.array(spectrum)*5.0e30
+                    spectrum = sim_point.sim_point(2500.0, 1.0, [(sim_point.Element.HELIUM, 0.1), (sim_point.Element.OXYGEN, 0.1), (sim_point.Element.IRON, 0.8)], wavelength, [1.0e-36 for _ in range(len(wavelength))], heights, distance_between_points)
+                    spectrum = np.array(spectrum)*5.0e32
                     # print(spectrum)
                     color = renderer.intensity_to_rgb(spectrum, wavelength)
                     #print(color)
