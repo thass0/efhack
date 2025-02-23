@@ -3,11 +3,12 @@ import numpy as np
 import pygame_gui
 import renderer
 
+
 # Initialize Pygame
 pygame.init()
 
 # Set up the display window
-width, height = 400, 400
+width, height = 200, 200
 screen = pygame.display.set_mode((width, height))
 pygame.display.set_caption("Fast Pixel Rendering")
 
@@ -27,6 +28,44 @@ clock = pygame.time.Clock()
 
 # Create a NumPy array to hold pixel values
 pixels = np.zeros((width, height, 3), dtype=np.uint8)
+
+cam_pos = np.array([0,0,-300])
+cam_dis = 100
+plan_pos = np.array([0,0,0])
+distance_between_pixels = 1
+displacement_width = (1/2)*width*distance_between_pixels
+displacement_height = (1/2)*height*distance_between_pixels
+distance_between_points = 10
+
+def ray_sphere_intersection(ray_origin, ray_direction, sphere_center, sphere_radius):
+    # Vector from the ray's origin to the sphere's center
+    oc = ray_origin - sphere_center
+
+    # Calculate coefficients for the quadratic equation At^2 + Bt + C = 0
+    a = np.dot(ray_direction, ray_direction)  # Should be 1 if the direction is normalized
+    b = 2 * np.dot(oc, ray_direction)
+    c = np.dot(oc, oc) - sphere_radius ** 2
+
+    # Calculate the discriminant
+    discriminant = b ** 2 - 4 * a * c
+
+    # If the discriminant is negative, there are no real intersections
+    if discriminant < 0:
+        return None
+
+    # Calculate the two possible solutions (intersections)
+    sqrt_discriminant = np.sqrt(discriminant)
+    t1 = (-b - sqrt_discriminant) / (2 * a)
+    t2 = (-b + sqrt_discriminant) / (2 * a)
+
+    # Return the intersection points (if t1 and t2 are positive, they are along the ray direction)
+    intersections = []
+    if t1 >= 0:
+        intersections.append(ray_origin + t1 * ray_direction)
+    if t2 >= 0:
+        intersections.append(ray_origin + t2 * ray_direction)
+
+    return intersections if intersections else None
 
 # Main loop to handle rendering and updates
 running = True
@@ -49,11 +88,7 @@ while running:
     # Convert the intensity and wavelength to RGB values
     rgb_value = renderer.intensity_to_rgb(intensity, wavelength)
 
-    cam_pos = np.array([0,0,-10])
-    cam_dis = 10
-    distance_between_pixels = 1
-    displacement_width = (1/2)*width*distance_between_pixels
-    displacement_height = (1/2)*height*distance_between_pixels
+    
 
     # Example: Update a few random pixels with different colors
     for x in range(width):
@@ -62,8 +97,15 @@ while running:
             grid_y_pos = -displacement_height + y*distance_between_pixels
             grid_pos = np.array([grid_x_pos, grid_y_pos, cam_dis])
             dir_vec = grid_pos - cam_pos
-            #dir_vec = dir_vec / np.linalg.norm(dir_vec)
-            pixels[x, y] = rgb_value
+            dir_vec = dir_vec / np.linalg.norm(dir_vec)
+            intersections = ray_sphere_intersection(cam_pos, dir_vec, plan_pos, 100)
+            if len(intersections) >= 2:
+                distance = np.linalg.norm(intersections[1]-intersections[0])
+                amount_points = int(distance / distance_between_points)
+                heights = np.array([])
+                for i in range(amount_points):
+                    heights = np.append(heights, np.linalg.norm((intersections[0] + i*dir_vec*distance_between_points) - plan_pos))
+            pixels[x, y] = (0,0,0)
 
 
     # Convert the NumPy array to a surface for Pygame
@@ -80,7 +122,7 @@ while running:
 
     # Update the screen
     pygame.display.flip()
-    clock.tick(30)  # Force 30 FPS
+    clock.tick(1)  # Force 30 FPS
 
 # Quit Pygame
 pygame.quit()
