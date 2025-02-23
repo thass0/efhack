@@ -2,13 +2,31 @@ import pygame
 import numpy as np
 import pygame_gui
 import renderer
+import sim_point
+from PIL import Image
 
+width, height = 120, 120
+
+# Open the image
+image_path = "mars_1k_color.jpg"  # Replace with your image path
+image = Image.open(image_path)
+
+# Convert the image to RGB if it's not already
+image = image.convert("RGB")
+image = image.resize((width,height),Image.Resampling.NEAREST)
+
+# Get the image size (width and height)
+img_width, img_height = image.size
+
+# Access pixels using the load() method
+img_pixels = np.array(image)
+img_pixels = img_pixels/25
 
 # Initialize Pygame
 pygame.init()
 
 # Set up the display window
-width, height = 200, 200
+
 screen = pygame.display.set_mode((width, height))
 pygame.display.set_caption("Fast Pixel Rendering")
 
@@ -30,12 +48,12 @@ clock = pygame.time.Clock()
 pixels = np.zeros((width, height, 3), dtype=np.uint8)
 
 cam_pos = np.array([0,0,-300])
-cam_dis = 100
+cam_dis = 50
 plan_pos = np.array([0,0,0])
 distance_between_pixels = 1
 displacement_width = (1/2)*width*distance_between_pixels
 displacement_height = (1/2)*height*distance_between_pixels
-distance_between_points = 10
+distance_between_points = 3
 
 def ray_sphere_intersection(ray_origin, ray_direction, sphere_center, sphere_radius):
     # Vector from the ray's origin to the sphere's center
@@ -49,23 +67,32 @@ def ray_sphere_intersection(ray_origin, ray_direction, sphere_center, sphere_rad
     # Calculate the discriminant
     discriminant = b ** 2 - 4 * a * c
 
-    # If the discriminant is negative, there are no real intersections
+    # If the discriminant is negative, there are no real atm_interesctions
     if discriminant < 0:
         return None
 
-    # Calculate the two possible solutions (intersections)
+    # Calculate the two possible solutions (atm_interesctions)
     sqrt_discriminant = np.sqrt(discriminant)
     t1 = (-b - sqrt_discriminant) / (2 * a)
     t2 = (-b + sqrt_discriminant) / (2 * a)
 
     # Return the intersection points (if t1 and t2 are positive, they are along the ray direction)
-    intersections = []
+    atm_interesctions = []
     if t1 >= 0:
-        intersections.append(ray_origin + t1 * ray_direction)
+        atm_interesctions.append(ray_origin + t1 * ray_direction)
     if t2 >= 0:
-        intersections.append(ray_origin + t2 * ray_direction)
+        atm_interesctions.append(ray_origin + t2 * ray_direction)
 
-    return intersections if intersections else None
+    return atm_interesctions if atm_interesctions else None
+
+def add_stars(pixels, num_stars=100):
+    """ Add random stars to the background """
+    for _ in range(num_stars):
+        star_x = np.random.randint(0, width)
+        star_y = np.random.randint(0, height)
+        star_brightness = np.random.randint(200, 255)  # Brightness of stars
+        pixels[star_x, star_y] = (255, 255, 225)  # White stars
+    return pixels
 
 # Main loop to handle rendering and updates
 running = True
@@ -77,6 +104,7 @@ while running:
             running = False
         manager.process_events(event)  # Process events for the UI elements
 
+    add_stars(pixels)
     # Get the current value of the brightness from the slider
     brightness = brightness_slider.get_current_value()
 
@@ -98,16 +126,43 @@ while running:
             grid_pos = np.array([grid_x_pos, grid_y_pos, cam_dis])
             dir_vec = grid_pos - cam_pos
             dir_vec = dir_vec / np.linalg.norm(dir_vec)
-            intersections = ray_sphere_intersection(cam_pos, dir_vec, plan_pos, 100)
-            if len(intersections) >= 2:
-                distance = np.linalg.norm(intersections[1]-intersections[0])
-                amount_points = int(distance / distance_between_points)
-                heights = np.array([])
-                for i in range(amount_points):
-                    heights = np.append(heights, np.linalg.norm((intersections[0] + i*dir_vec*distance_between_points) - plan_pos))
-            pixels[x, y] = (0,0,0)
+            atm_interesctions = ray_sphere_intersection(cam_pos, dir_vec, plan_pos, 50)
+            plan_interesctions = ray_sphere_intersection(cam_pos, dir_vec, plan_pos, 40)
+            
 
+            if atm_interesctions != None and len(atm_interesctions) >= 2:
+                if(plan_interesctions != None):
+                    # print("found interesction")
+                    distance = np.linalg.norm(plan_interesctions[0]-atm_interesctions[0])
+                    amount_points = int(distance / distance_between_points)
+                    heights = np.array([])
+                    for i in range(amount_points):
+                        heights = np.append(heights, np.linalg.norm((atm_interesctions[0] + i*dir_vec*distance_between_points) - plan_pos))
+                    offset = (np.abs(width/2 - x)/width/2)**2  + (np.abs(height/2 - y)/height/2)**2
+                    offset *= 200
+                    # np.array([1.10, img_pixels[x,y,2] - offset, 1.30, img_pixels[x,y,1] - offset, img_pixels[x,y,0] - offset, 1.15, 1, 1, 0.90, 0.85])*1.0e-33
+                    spectrum = sim_point.sim_point(2500.0, 1.0,[(sim_point.Element.HELIUM, 0.2), (sim_point.Element.OXYGEN, 0.0), (sim_point.Element.IRON, 0.8)], wavelength,[1.0e-33 for _ in range(len(wavelength))] , heights, distance_between_points)
+                    spectrum = np.array(spectrum)*5.0e30
+                    #print(spectrum)
+                    color = renderer.intensity_to_rgb(spectrum, wavelength)
+                    #print(color)
+                    pixels[x, y] = color
 
+                else:
+                    # print("found interesction")
+                    distance = np.linalg.norm(atm_interesctions[1]-atm_interesctions[0])
+                    amount_points = int(distance / distance_between_points)
+                    heights = np.array([])
+                    for i in range(amount_points):
+                        heights = np.append(heights, np.linalg.norm((atm_interesctions[0] + i*dir_vec*distance_between_points) - plan_pos))
+                    spectrum = sim_point.sim_point(2500.0, 1.0, [(sim_point.Element.HELIUM, 0.1), (sim_point.Element.OXYGEN, 0.1), (sim_point.Element.IRON, 0.8)], wavelength, [1.0e-33 for _ in range(len(wavelength))], heights, distance_between_points)
+                    spectrum = np.array(spectrum)*5.0e30
+                    # print(spectrum)
+                    color = renderer.intensity_to_rgb(spectrum, wavelength)
+                    #print(color)
+                    pixels[x, y] = color
+
+    # print(pixels)
     # Convert the NumPy array to a surface for Pygame
     pixel_surface = pygame.surfarray.make_surface(pixels)
 
@@ -115,14 +170,19 @@ while running:
     screen.blit(pixel_surface, (0, 0))
 
     # Update the UI elements (like the slider)
-    manager.update(time_delta)
+    # manager.update(time_delta)
 
     # Draw the UI elements (including the slider)
-    manager.draw_ui(screen)
+    # manager.draw_ui(screen)
 
     # Update the screen
     pygame.display.flip()
     clock.tick(1)  # Force 30 FPS
+    
+    break
 
+print("done")
+while True:
+    continue
 # Quit Pygame
 pygame.quit()

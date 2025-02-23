@@ -93,9 +93,8 @@ def sim_point(temp: float, surface_pressure: float, elements: list[Tuple[Element
     for transmission_spectrum in transmitted_spectra:
         incident_surface_spectrum *= transmission_spectrum
 
-    # Update to use numpy:
-    # spectrum = incident_surface_spectrum
-    spectrum = np.zeros(len(wavelengths))
+    spectrum = incident_surface_spectrum
+    # spectrum = np.zeros(len(wavelengths))
     for layer in transmitted_above:
         spectrum += layer
 
