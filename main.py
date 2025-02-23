@@ -4,11 +4,15 @@ import pygame_gui
 import renderer
 import sim_point
 from PIL import Image
+import random
 
-width, height = 150, 150
+width, height = 175, 175
+upsampling = 3
 
 # Open the image
-image_path = "neptunemap.jpg"  # Replace with your image path
+images_path = ["neptunemap.jpg", "mars_1k_color.jpg", "mercurymap.jpg", "plutomap1k.jpg"]
+# image_path = images_path[random.randint(0, len(images_path)-1)]  # Replace with your image path
+image_path = "neptunemap.jpg"
 image = Image.open(image_path)
 
 # Convert the image to RGB if it's not already
@@ -27,7 +31,7 @@ pygame.init()
 
 # Set up the display window
 
-screen = pygame.display.set_mode((width, height))
+screen = pygame.display.set_mode((width*upsampling, height*upsampling))
 pygame.display.set_caption("Fast Pixel Rendering")
 
 # Create a manager for the UI elements
@@ -53,7 +57,7 @@ plan_pos = np.array([0,0,0])
 distance_between_pixels = 1
 displacement_width = (1/2)*width*distance_between_pixels
 displacement_height = (1/2)*height*distance_between_pixels
-distance_between_points = 3
+distance_between_points = 1
 
 def ray_sphere_intersection(ray_origin, ray_direction, sphere_center, sphere_radius):
     # Vector from the ray's origin to the sphere's center
@@ -126,8 +130,8 @@ while running:
             grid_pos = np.array([grid_x_pos, grid_y_pos, cam_dis])
             dir_vec = grid_pos - cam_pos
             dir_vec = dir_vec / np.linalg.norm(dir_vec)
-            atm_interesctions = ray_sphere_intersection(cam_pos, dir_vec, plan_pos, 50)
-            plan_interesctions = ray_sphere_intersection(cam_pos, dir_vec, plan_pos, 40)
+            atm_interesctions = ray_sphere_intersection(cam_pos, dir_vec, plan_pos, 70)
+            plan_interesctions = ray_sphere_intersection(cam_pos, dir_vec, plan_pos, 50)
             
 
             if atm_interesctions != None and len(atm_interesctions) >= 2:
@@ -141,7 +145,7 @@ while running:
                     offset = (np.abs(width/2 - x)/width/2)**2  + (np.abs(height/2 - y)/height/2)**2
                     offset *= 100
                     # 
-                    spectrum = sim_point.sim_point(2500.0, 1.0,[(sim_point.Element.HELIUM, 0.2), (sim_point.Element.OXYGEN, 0.0), (sim_point.Element.IRON, 0.8)], wavelength, np.array([1.10, img_pixels[x,y,2] - offset, 1.30, img_pixels[x,y,1] - offset, img_pixels[x,y,0] - offset, 1.15, 1, 1, 0.90, 0.85])*1.0e-36, heights, distance_between_points)
+                    spectrum = sim_point.sim_point(2500.0, 1.0,[(sim_point.Element.HELIUM, 0.2), (sim_point.Element.OXYGEN, 0.0), (sim_point.Element.IRON, 0.8)], wavelength, np.array([1.10, img_pixels[x,y,2] - offset, 1.30, img_pixels[x,y,1] - offset, img_pixels[x,y,0] - offset, 1.15, 1, 1, 0.90, 0.85])*5.0e-37, heights, distance_between_points)
                     spectrum = np.array(spectrum)*5.0e32
                     #print(spectrum)
                     color = renderer.intensity_to_rgb(spectrum, wavelength)
@@ -164,7 +168,9 @@ while running:
 
     # print(pixels)
     # Convert the NumPy array to a surface for Pygame
-    pixel_surface = pygame.surfarray.make_surface(pixels)
+    pixels_upsampled = np.repeat(pixels, upsampling, axis=0)  # Duplicate along the rows
+    pixels_upsampled = np.repeat(pixels_upsampled, upsampling, axis=1)  # Duplicate along the columns
+    pixel_surface = pygame.surfarray.make_surface(pixels_upsampled)
 
     # Render the surface onto the screen
     screen.blit(pixel_surface, (0, 0))
