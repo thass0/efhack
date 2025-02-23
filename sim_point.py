@@ -43,10 +43,10 @@ def pressure(temp: float, height: float, mean_molecular_mass: float, gravity: fl
 
 GRAVITY = 9.81
 
-def elem_fraction_by_layer(layers: list[float], temp: float, surface_pressure: float, avg_elem_cont: list[float]) -> list[list[Tuple[Element, float]]]:
-    pressure_dist_by_layer = [[(elem, pressure(temp, height, elem.molecular_mass, GRAVITY, surface_pressure)) for elem, _ in elements] for height in layers]
-    total_pressure_by_layer = [sum(map(lambda x: x[1], dist)) for dist in pressure_dist_by_layer]
-    return [list(map(lambda x: (x[0], x[1] / total_p), dist)) for dist, total_p in zip(pressure_dist_by_layer, total_pressure_by_layer)]
+def elem_dist_by_height(height: float, temp: float, surface_pressure: float, elements: list[Element]) -> list[Tuple[Element, float]]:
+    pressures = [pressure(temp, height, elem.molecular_mass, GRAVITY, surface_pressure) for elem in elements]
+    total_pressure = sum(pressures)
+    return [(elem, pressure / total_pressure if total_pressure != 0.0 else 0.0) for elem, pressure in zip(elements, pressures)]
 
 def planck_func(wavelength: float, temp: float) -> float:
     h = 6.626e-34  # Planck constant (J s)
@@ -54,11 +54,11 @@ def planck_func(wavelength: float, temp: float) -> float:
     k_B = 1.380649e-23  # Boltzmann constant (J/K)
     return 2 * h * c**2 / wavelength**5 / (math.exp(h * c / (wavelength * k_B * temp)) - 1)
 
-def calc_spectra(fraction_by_layer: list[list[Tuple[Element, float]]], wavelengths: list[float], layer_depth: float, layer_temp: float) -> Tuple[list[list[float]], list[list[float]]]:
+def calc_spectra(dist_by_layer: list[list[Tuple[Element, float]]], wavelengths: list[float], layer_depth: float, temp: float) -> Tuple[list[list[float]], list[list[float]]]:
     emission_spectra = []
     transmitted_spectra = []
 
-    for dist in fraction_by_layer:
+    for dist in dist_by_layer:
         emission_spectrum = []
         transmitted_spectrum = []
         for wavelength in wavelengths:
@@ -74,14 +74,13 @@ def calc_spectra(fraction_by_layer: list[list[Tuple[Element, float]]], wavelengt
 
     return emission_spectra, transmitted_spectra
 
-def sim_point(temp: float, surface_pressure: float, elements: list[Tuple[Element, float]], wavelengths: list[float], incident_spectrum: list[float]) -> list[float]:
+def sim_point(temp: float, surface_pressure: float, elements: list[Tuple[Element, float]], wavelengths: list[float], incident_spectrum: list[float], heights: list[float], depth: float) -> list[float]:
     assert sum(cont for _, cont in elements) == 1.0
     assert len(wavelengths) == len(incident_spectrum)
 
-    layers = [i * 1.0e2 for i in range(10)]
-    fraction_by_layer = elem_fraction_by_layer(layers, temp, surface_pressure, list(map(lambda elem: elem[1], elements)))
+    dist_by_layer = [elem_dist_by_height(height, temp, surface_pressure, list(map(lambda x: x[0], elements))) for height in heights]
 
-    emission_spectra, transmitted_spectra = calc_spectra(fraction_by_layer, wavelengths, 1.0e2, temp)
+    emission_spectra, transmitted_spectra = calc_spectra(dist_by_layer, wavelengths, depth, temp)
 
     #  For each layer, the spectrum that's transmitted through all layers above
     transmitted_above = []
@@ -106,15 +105,17 @@ def sim_point(temp: float, surface_pressure: float, elements: list[Tuple[Element
     return spectrum
 
 
-temp = 270.0
-surface_pressure = 1.0
-elements = [(Element.HELIUM, 0.7), (Element.OXYGEN, 0.1), (Element.IRON, 0.2)]
-
 def calc_and_show():
+    temp = 270.0
+    surface_pressure = 1.0
+    elements = [(Element.HELIUM, 0.7), (Element.OXYGEN, 0.1), (Element.IRON, 0.2)]
+
     wavelengths = [i + 400.0 for i in range(400)]
     incident_spectrum = [1.0 for _ in range(400)]
+    depth = 10.0e8
+    heights = [i * depth for i in range(100)]
 
-    spectrum = sim_point(temp, surface_pressure, elements, wavelengths, incident_spectrum)
+    spectrum = sim_point(temp, surface_pressure, elements, wavelengths, incident_spectrum, heights, depth)
 
     import matplotlib.pyplot as plt
     fig, ax = plt.subplots(figsize=(8, 6))
@@ -125,3 +126,5 @@ def calc_and_show():
     ax.set_xlim(380, 780)
     ax.grid(True)
     plt.show()
+
+calc_and_show()
