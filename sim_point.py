@@ -3,36 +3,58 @@ from typing import Tuple
 import math
 import numpy as np
 from numpy.typing import NDArray
+from astropy.io import fits
+
+hdul = fits.open('data/wavelength.fits')
+
+h2_data = np.loadtxt('data/H2_data.txt', skiprows=3)
+he_data = np.loadtxt('data/He_data.txt', skiprows=3)
+ti_data = np.loadtxt('data/Ti_data.txt', skiprows=3)
+h2_160_data = np.loadtxt('data/1H2-16O_data.txt', skiprows=3)
+wl=[0.5,5.0]
+
+wavelength_to_idx_cache = {}
+
+def find_nearest_index(wavelength, data):
+    if wavelength in wavelength_to_idx_cache:
+        return wavelength_to_idx_cache[wavelength]
+    else:
+        index = np.argmin(np.abs(data - wavelength))
+        wavelength_to_idx_cache[wavelength] = index
+        return index
 
 class Element(Enum):
-    HELIUM = auto() # helium-4
-    OXYGEN = auto() # O_2
-    IRON = auto()
+    HELIUM = auto()
+    H2 = auto()
+    TI = auto()
+    H2_160 = auto()
 
     @property
     def molecular_mass(self) -> float:
         # In g/mol
         if self == Element.HELIUM:
             return 4.002603
-        if  self == Element.OXYGEN:
-            return 31.9988
-        if self == Element.IRON:
-            return 55.85
+        if  self == Element.H2:
+            return 2.016
+        if self == Element.TI:
+            return 63.87
+        if self == Element.H2_160:
+            return 18.01528
         assert False
 
     def absorption_cross_section(self, wavelength: float) -> float:
-        # These values most hold for the visible spectrum since that's what
-        # we're working with.
+        idx = find_nearest_index(wavelength / 1000.0, hdul[0].data)
+
         if self == Element.HELIUM:
-            return 10.0e-30
-        if self == Element.OXYGEN:
-            return 10.0e-22
-        if self == Element.IRON:
-            if abs(wavelength - 438.3) < 10.0 or abs(wavelength - 526.9) < 10.0 or abs(wavelength - 672.0) < 10.0:
-                return 10.0e-13
-            else:
-                return 10.0e-16
+            return he_data[idx]
+        if self == Element.H2:
+            return h2_data[idx]
+        if self == Element.TI:
+            return ti_data[idx]
+        if self == Element.H2_160:
+            return h2_160_data[idx]
         assert False
+
 
 def scale_height(temp: float, mean_molecular_mass: float, gravity: float) -> float:
     # H = RT / Mg where R is the molar gas constant and M is the mean moral mass
@@ -60,7 +82,8 @@ def calc_spectra(dist_by_layer: NDArray, elements: NDArray, wavelengths: NDArray
     emission_spectra = np.zeros((len(dist_by_layer), len(wavelengths)))
     transmitted_spectra = np.zeros((len(dist_by_layer), len(wavelengths)))
 
-    absorption_cross_sections = np.array([elem.absorption_cross_section(wavelength) for elem in elements for wavelength in wavelengths])
+    absorption_cross_sections = np.array([elem.absorption_cross_section(wavelength) * 1e30 for elem in elements for wavelength in wavelengths])
+    print(absorption_cross_sections)
 
     planck_by_wavelength = np.array([planck_func(wavelength, temp) for wavelength in wavelengths])
 
@@ -78,7 +101,6 @@ def calc_spectra(dist_by_layer: NDArray, elements: NDArray, wavelengths: NDArray
     return emission_spectra, transmitted_spectra
 
 def sim_point(temp: float, surface_pressure: float, elements: list[Tuple[Element, float]], wavelengths: NDArray[np.float64], incident_spectrum: NDArray[np.float64], heights: NDArray[np.float64], depth: float) -> NDArray[np.float64]:
-    assert sum(cont for _, cont in elements) == 1.0
     assert len(wavelengths) == len(incident_spectrum)
 
     _elements = np.array(list(map(lambda x: x[0], elements)))
@@ -100,11 +122,14 @@ def sim_point(temp: float, surface_pressure: float, elements: list[Tuple[Element
     for transmission_spectrum in transmitted_spectra:
         incident_surface_spectrum *= transmission_spectrum
 
-    spectrum = incident_surface_spectrum
-    # spectrum = np.zeros(len(wavelengths))
+    spectrum = np.zeros(len(wavelengths))
     for layer in transmitted_above:
         spectrum += layer
 
     assert len(spectrum) == len(wavelengths)
 
     return spectrum
+
+ELEMENT_CONTENTS = [(Element.H2, 0.6), (Element.HELIUM, 0.15), (Element.H2_160, 5e-3), (Element.TI, 5e-4)]
+TEMPERATURE = 2200.0
+SURFACE_PRESSURE = 130e5
