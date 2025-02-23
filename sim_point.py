@@ -45,10 +45,10 @@ def pressure(temp: float, height: float, mean_molecular_mass: float, gravity: fl
 
 GRAVITY = 9.81
 
-def calc_elem_dist(height: float, temp: float, surface_pressure: float, elements: list[Element]) -> list[Tuple[Element, float]]:
+def calc_elem_dist(height: float, temp: float, surface_pressure: float, elements: NDArray) -> NDArray:
     pressures = [pressure(temp, height, elem.molecular_mass, GRAVITY, surface_pressure) for elem in elements]
     total_pressure = sum(pressures)
-    return [(elem, pressure / total_pressure if total_pressure != 0.0 else 0.0) for elem, pressure in zip(elements, pressures)]
+    return np.array([pressure / total_pressure if total_pressure != 0.0 else 0.0 for pressure in pressures])
 
 def planck_func(wavelength: float, temp: float) -> float:
     h = 6.626e-34  # Planck constant (J s)
@@ -56,17 +56,23 @@ def planck_func(wavelength: float, temp: float) -> float:
     k_B = 1.380649e-23  # Boltzmann constant (J/K)
     return 2 * h * c**2 / wavelength**5 / (math.exp(h * c / (wavelength * k_B * temp)) - 1)
 
-def calc_spectra(dist_by_layer: list[list[Tuple[Element, float]]], wavelengths: NDArray[np.float64], depth: float, temp: float) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
+def calc_spectra(dist_by_layer: NDArray, elements: NDArray, wavelengths: NDArray[np.float64], depth: float, temp: float) -> Tuple[NDArray[np.float64], NDArray[np.float64]]:
     emission_spectra = np.zeros((len(dist_by_layer), len(wavelengths)))
     transmitted_spectra = np.zeros((len(dist_by_layer), len(wavelengths)))
 
+    absorption_cross_sections = np.array([elem.absorption_cross_section(wavelength) for elem in elements for wavelength in wavelengths])
+
+    planck_by_wavelength = np.array([planck_func(wavelength, temp) for wavelength in wavelengths])
+
     for i, dist in enumerate(dist_by_layer):
         for j, wavelength in enumerate(wavelengths):
-            absorption_coeff = sum(frac * elem.absorption_cross_section(wavelength) for elem, frac in dist)
+            absorption_coeff = 0.0
+            for k in range(len(dist)):
+                absorption_coeff += dist[k] * absorption_cross_sections[k * len(wavelengths) + j]
             optical_depth = absorption_coeff * depth
             transmission = math.exp(-optical_depth)
             absorption = 1 - transmission
-            emission_spectra[i, j] = absorption * planck_func(wavelength, temp)
+            emission_spectra[i, j] = absorption * planck_by_wavelength[j]
             transmitted_spectra[i, j] = transmission
 
     return emission_spectra, transmitted_spectra
@@ -75,9 +81,10 @@ def sim_point(temp: float, surface_pressure: float, elements: list[Tuple[Element
     assert sum(cont for _, cont in elements) == 1.0
     assert len(wavelengths) == len(incident_spectrum)
 
-    dist_by_layer = [calc_elem_dist(height, temp, surface_pressure, list(map(lambda x: x[0], elements))) for height in heights]
+    _elements = np.array(list(map(lambda x: x[0], elements)))
+    dist_by_layer = np.array([calc_elem_dist(height, temp, surface_pressure, _elements) for height in heights])
 
-    emission_spectra, transmitted_spectra = calc_spectra(dist_by_layer, wavelengths, depth, temp)
+    emission_spectra, transmitted_spectra = calc_spectra(dist_by_layer, _elements, wavelengths, depth, temp)
 
     assert(len(emission_spectra) == len(transmitted_spectra))
 
